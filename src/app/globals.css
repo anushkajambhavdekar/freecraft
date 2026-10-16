@@ -1,0 +1,26 @@
+@import "tailwindcss";
+
+:root {
+  --fc-navy: #0b1020;
+  --fc-blue: #2563eb;
+  --fc-blue-bright: #3b82f6;
+  --fc-cyan: #06b6d4;
+  --fc-surface: #111827;
+  --fc-elevated: #172033;
+  --fc-border: #263247;
+  --fc-text: #f8fafc;
+  --fc-muted: #94a3b8;
+}
+
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body {
+  margin: 0;
+  min-height: 100vh;
+  background: var(--fc-navy);
+  color: var(--fc-text);
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+button, input { font: inherit; }
+button { cursor: pointer; }
+::selection { background: #2563eb; color: white; }
