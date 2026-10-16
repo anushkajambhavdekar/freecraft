@@ -44,9 +44,14 @@ export default function Home() {
           <a href="#tools" className="hover:text-white">Toolbox</a>
           <Link href="/templates" className="hover:text-white">Templates</Link>
         </div>
-        <Link href="/editor?type=poster" className="rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-blue-500">
-          Start creating
-        </Link>
+        <div className="flex items-center gap-2">
+          <Link href="/dashboard" className="hidden rounded-xl border border-white/10 bg-white/5 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-white/10 sm:block">
+            Workspace
+          </Link>
+          <Link href="/editor?type=poster" className="rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-blue-500">
+            Start creating
+          </Link>
+        </div>
       </nav>
 
       <section className="mx-auto max-w-7xl px-6 pb-20 pt-16 lg:px-10 lg:pt-24">

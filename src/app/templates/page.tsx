@@ -1,9 +1,20 @@
+"use client";
+
 import Image from "next/image";
 import Link from "next/link";
 import { ArrowLeft, ArrowRight, Sparkles } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { templates } from "@/lib/templates";
+import { createProject } from "@/lib/projects";
 
 export default function TemplatesPage() {
+  const router = useRouter();
+
+  const useTemplate = (template: (typeof templates)[number]) => {
+    const project = createProject(template.type as Parameters<typeof createProject>[0], template.title);
+    router.push(`/editor?type=${template.type}&template=${template.id}&new=1&design=${project.id}`);
+  };
+
   return (
     <main className="min-h-screen bg-[#080b14] text-white">
       <nav className="mx-auto flex max-w-7xl items-center justify-between px-6 py-5 lg:px-10">
@@ -42,9 +53,9 @@ export default function TemplatesPage() {
               <div className="p-5">
                 <div className="text-lg font-bold">{template.title}</div>
                 <p className="mt-2 text-sm leading-6 text-slate-400">{template.description}</p>
-                <Link href={`/editor?type=${template.type}&template=${template.id}&new=1`} className="mt-5 inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold hover:bg-blue-500">
+                <button onClick={() => useTemplate(template)} className="mt-5 inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold hover:bg-blue-500">
                   Use template <ArrowRight size={15} />
-                </Link>
+                </button>
               </div>
             </article>
           ))}

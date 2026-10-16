@@ -2,34 +2,28 @@
 
 **Design. Create. Share. Free.**
 
-## v0.5 — Template system
+## v0.7.1 — Editor + workspace fixes
 
-FreeCraft now has the first reusable template system:
+This patch restores the editor controls and fixes the dashboard card menu being clipped.
 
-- Template gallery at `/templates`
-- Six editable starter templates
-- Template metadata and categories
-- One-click open in the structured editor
-- Template objects remain individually editable
-- Template launches become a new design before returning to the normal editor URL
-- Local autosave continues after opening a template
+### Editor
+- Bold / italic / underline
+- Text alignment
+- Letter spacing
+- Line height
+- Center horizontally / vertically
+- Canvas size presets: Landscape, Square, HD, A4
+- Custom canvas width / height
+- Canvas size and background persistence
+- Autosave / undo / redo / grouping / layers retained
+
+### Workspace
+- Rename / Duplicate / Move to Trash menus are visible
+- Thumbnail remains clipped while action menus can escape the card
 
 ## Run
-
-Requirements: Node.js 20.9+
 
 ```bash
 npm install
 npm run dev
 ```
-
-Open `http://localhost:3000` or `http://localhost:3000/templates`.
-
-## Test
-
-1. Open `/templates`.
-2. Choose a template.
-3. Change its text, colors, position, and layers.
-4. Refresh the editor.
-5. Confirm your edits persist.
-6. Export PNG.

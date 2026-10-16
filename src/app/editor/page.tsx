@@ -24,6 +24,10 @@ import {
   ZoomIn,
   ZoomOut,
   Type,
+  Bold,
+  Italic,
+  Underline,
+  MoveVertical,
 } from "lucide-react";
 import {
   ActiveSelection,
@@ -39,6 +43,7 @@ import {
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { createTemplate, getTemplate } from "@/lib/templates";
+import { DESIGN_PREFIX, getProject, updateProject } from "@/lib/projects";
 
 type Tool = "select" | "text" | "rect" | "circle" | "triangle";
 
@@ -49,6 +54,8 @@ const typeNames: Record<string, string> = {
   social: "Social Post",
   thumbnail: "YouTube Thumbnail",
   ui: "UI Design",
+  certificate: "Certificate",
+  invitation: "Invitation",
 };
 
 const fonts = [
@@ -60,7 +67,7 @@ const fonts = [
   "Trebuchet MS",
 ];
 
-const STORAGE_PREFIX = "freecraft:design:v0.5:";
+const STORAGE_PREFIX = DESIGN_PREFIX;
 
 function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value));
@@ -83,6 +90,7 @@ export default function EditorPage() {
   const searchParams = useSearchParams();
   const type = searchParams.get("type") ?? "poster";
   const templateId = searchParams.get("template");
+  const designId = searchParams.get("design") ?? `legacy-${type}`;
   const startFromTemplate = searchParams.get("new") === "1" && Boolean(templateId);
 
   const canvasEl = useRef<HTMLCanvasElement | null>(null);
@@ -103,11 +111,21 @@ export default function EditorPage() {
   const [background, setBackground] = useState("#ffffff");
   const [fontFamily, setFontFamily] = useState("Arial");
   const [fontSize, setFontSize] = useState(30);
+  const [fontWeight, setFontWeight] = useState<"normal" | "700">("normal");
+  const [fontStyle, setFontStyle] = useState<"normal" | "italic">("normal");
+  const [underline, setUnderline] = useState(false);
+  const [textAlign, setTextAlign] = useState("left");
+  const [charSpacing, setCharSpacing] = useState(0);
+  const [lineHeight, setLineHeight] = useState(1.16);
   const [opacity, setOpacity] = useState(100);
+  const [canvasWidth, setCanvasWidth] = useState(900);
+  const [canvasHeight, setCanvasHeight] = useState(600);
+  const [projectName, setProjectName] = useState<string | null>(null);
 
   const template = useMemo(() => getTemplate(templateId), [templateId]);
-  const title = useMemo(() => template?.title ?? `Untitled ${typeNames[type] ?? "Design"}`, [template, type]);
-  const storageKey = `${STORAGE_PREFIX}${type}`;
+  const project = useMemo(() => getProject(designId), [designId]);
+  const title = useMemo(() => projectName ?? project?.name ?? template?.title ?? `Untitled ${typeNames[type] ?? "Design"}`, [projectName, project, template, type]);
+  const storageKey = `${STORAGE_PREFIX}${designId}`;
 
   const refreshObjects = () => {
     const canvas = canvasRef.current;
@@ -121,10 +139,14 @@ export default function EditorPage() {
     localStorage.setItem(
       storageKey,
       JSON.stringify({
-        version: "0.5",
+        version: "0.7.1",
+        width: canvas.getWidth(),
+        height: canvas.getHeight(),
+        background: canvas.backgroundColor,
         canvas: canvas.toJSON(),
       }),
     );
+    updateProject(designId, { updatedAt: Date.now() });
     setSavedAt(
       new Date().toLocaleTimeString([], {
         hour: "2-digit",
@@ -240,11 +262,15 @@ export default function EditorPage() {
     canvasRef.current = canvas;
 
     const boot = async () => {
+      const currentProject = getProject(designId);
+      if (currentProject) setProjectName(currentProject.name);
+
       if (startFromTemplate && templateId) {
         const created = createTemplate(canvas, templateId);
         if (created) {
           restoringRef.current = false;
-          window.history.replaceState(null, "", `/editor?type=${encodeURIComponent(type)}`);
+          const target = `/editor?type=${encodeURIComponent(type)}&design=${encodeURIComponent(designId)}`;
+          window.history.replaceState(null, "", target);
           setBackground(created.background);
           setSavedAt("template");
           canvas.requestRenderAll();
@@ -258,10 +284,25 @@ export default function EditorPage() {
 
       const raw = localStorage.getItem(storageKey);
 
+      // One-time migration for designs created by v0.5/v0.6 before project IDs existed.
+      if (!raw && designId.startsWith("legacy-") && typeof window !== "undefined") {
+        const legacyKeys = [`freecraft:design:v0.6:${type}`, `freecraft:design:v0.5:${type}`];
+        const legacyRaw = legacyKeys.map((key) => localStorage.getItem(key)).find(Boolean);
+        if (legacyRaw) localStorage.setItem(storageKey, legacyRaw);
+      }
+
       if (raw) {
         try {
           const parsed = JSON.parse(raw);
           const payload = parsed?.canvas ?? parsed;
+          const savedWidth = Number(parsed?.width) || 900;
+          const savedHeight = Number(parsed?.height) || 600;
+          const savedBackground = typeof parsed?.background === "string" ? parsed.background : "#ffffff";
+          canvas.setDimensions({ width: savedWidth, height: savedHeight });
+          canvas.backgroundColor = savedBackground;
+          setCanvasWidth(savedWidth);
+          setCanvasHeight(savedHeight);
+          setBackground(savedBackground);
           restoringRef.current = true;
           await canvas.loadFromJSON(payload);
           restoringRef.current = false;
@@ -297,6 +338,12 @@ export default function EditorPage() {
         if (active instanceof IText) {
           setFontFamily(active.fontFamily ?? "Arial");
           setFontSize(Math.round(active.fontSize ?? 30));
+          setFontWeight(active.fontWeight === "700" || Number(active.fontWeight) >= 700 ? "700" : "normal");
+          setFontStyle(active.fontStyle === "italic" ? "italic" : "normal");
+          setUnderline(Boolean(active.underline));
+          setTextAlign(active.textAlign ?? "left");
+          setCharSpacing(Math.round(active.charSpacing ?? 0));
+          setLineHeight(Number(active.lineHeight ?? 1.16));
         }
       }
     };
@@ -340,7 +387,7 @@ export default function EditorPage() {
     };
     // Initialize one canvas per design type.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [type, storageKey, startFromTemplate, templateId]);
+  }, [type, storageKey, startFromTemplate, templateId, designId]);
 
   useEffect(() => {
     const handler = (event: KeyboardEvent) => {
@@ -652,6 +699,37 @@ export default function EditorPage() {
     snapshot();
   };
 
+  const centerVertical = () => {
+    const canvas = canvasRef.current;
+    const active = canvas?.getActiveObject();
+    if (!canvas || !active) return;
+    active.set({ top: (canvas.getHeight() - active.getScaledHeight()) / 2 });
+    active.setCoords();
+    canvas.requestRenderAll();
+    snapshot();
+  };
+
+  const resizeCanvas = (width: number, height: number) => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const nextWidth = clamp(Math.round(width), 240, 2400);
+    const nextHeight = clamp(Math.round(height), 180, 2400);
+    canvas.setDimensions({ width: nextWidth, height: nextHeight });
+    setCanvasWidth(nextWidth);
+    setCanvasHeight(nextHeight);
+    canvas.requestRenderAll();
+    snapshot();
+  };
+
+  const updateTextStyle = (patch: Record<string, unknown>) => {
+    const active = canvasRef.current?.getActiveObject();
+    if (!(active instanceof IText)) return;
+    active.set(patch as Partial<IText>);
+    active.setCoords();
+    canvasRef.current?.requestRenderAll();
+    snapshot();
+  };
+
   const layerMove = (direction: "front" | "back") => {
     const canvas = canvasRef.current;
     const active = canvas?.getActiveObject();
@@ -723,7 +801,7 @@ export default function EditorPage() {
       <header className="flex h-14 shrink-0 items-center justify-between border-b border-white/10 bg-[#0f1422] px-3">
         <div className="flex min-w-0 items-center gap-3">
           <Link
-            href="/"
+            href="/dashboard"
             className="rounded-lg p-2 hover:bg-white/10"
             title="Back to FreeCraft"
           >
@@ -739,6 +817,9 @@ export default function EditorPage() {
         </div>
 
         <div className="flex items-center gap-1">
+          <Link href="/dashboard" className="mr-1 hidden rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs font-semibold hover:bg-white/10 sm:block">
+            Projects
+          </Link>
           <button
             onClick={() => void undo()}
             className="rounded-lg p-2 text-slate-300 hover:bg-white/10"
@@ -930,6 +1011,13 @@ export default function EditorPage() {
                         <AlignRight size={15} />
                       </button>
                       <button
+                        onClick={centerVertical}
+                        className="rounded-lg border border-white/10 p-2 hover:bg-white/10"
+                        title="Center vertically"
+                      >
+                        <MoveVertical size={15} />
+                      </button>
+                      <button
                         onClick={() => layerMove("front")}
                         className="ml-auto rounded-lg border border-white/10 p-2 hover:bg-white/10"
                         title="Bring to front"
@@ -1012,48 +1100,45 @@ export default function EditorPage() {
 
                   {!isMulti && selected instanceof IText && (
                     <section className="rounded-xl border border-white/10 bg-white/[0.03] p-3">
-                      <p className="mb-3 text-xs font-semibold text-slate-400">
-                        Typography
-                      </p>
+                      <div className="mb-3 flex items-center justify-between">
+                        <p className="text-xs font-semibold text-slate-400">Typography</p>
+                        <span className="text-[10px] text-slate-600">Text selected</span>
+                      </div>
 
                       <select
                         value={fontFamily}
                         onChange={(event) => {
                           const value = event.target.value;
                           setFontFamily(value);
-                          mutateSelection((object) =>
-                            object.set({ fontFamily: value }),
-                          );
+                          updateTextStyle({ fontFamily: value });
                         }}
                         className="w-full rounded-lg border border-white/10 bg-[#111827] px-3 py-2 text-xs outline-none"
                       >
-                        {fonts.map((font) => (
-                          <option key={font} value={font}>
-                            {font}
-                          </option>
-                        ))}
+                        {fonts.map((font) => <option key={font} value={font}>{font}</option>)}
                       </select>
 
-                      <label className="mt-3 block text-xs text-slate-400">
-                        Size
-                        <input
-                          type="number"
-                          min="8"
-                          max="160"
-                          value={fontSize}
-                          onChange={(event) => {
-                            const value = clamp(
-                              Number(event.target.value) || 8,
-                              8,
-                              160,
-                            );
-                            setFontSize(value);
-                            mutateSelection((object) =>
-                              object.set({ fontSize: value }),
-                            );
-                          }}
-                          className="mt-1 w-full rounded-lg border border-white/10 bg-[#111827] px-3 py-2 text-xs outline-none"
-                        />
+                      <div className="mt-2 grid grid-cols-3 gap-1.5">
+                        <button onClick={() => { const next = fontWeight === "700" ? "normal" : "700"; setFontWeight(next); updateTextStyle({ fontWeight: next }); }} className={`flex items-center justify-center rounded-lg border p-2 ${fontWeight === "700" ? "border-blue-400/40 bg-blue-500/15 text-blue-200" : "border-white/10 text-slate-400 hover:bg-white/5"}`} title="Bold"><Bold size={15} /></button>
+                        <button onClick={() => { const next = fontStyle === "italic" ? "normal" : "italic"; setFontStyle(next); updateTextStyle({ fontStyle: next }); }} className={`flex items-center justify-center rounded-lg border p-2 ${fontStyle === "italic" ? "border-blue-400/40 bg-blue-500/15 text-blue-200" : "border-white/10 text-slate-400 hover:bg-white/5"}`} title="Italic"><Italic size={15} /></button>
+                        <button onClick={() => { const next = !underline; setUnderline(next); updateTextStyle({ underline: next }); }} className={`flex items-center justify-center rounded-lg border p-2 ${underline ? "border-blue-400/40 bg-blue-500/15 text-blue-200" : "border-white/10 text-slate-400 hover:bg-white/5"}`} title="Underline"><Underline size={15} /></button>
+                      </div>
+
+                      <div className="mt-2 grid grid-cols-3 gap-1.5">
+                        {([['left', AlignLeft], ['center', AlignCenter], ['right', AlignRight]] as const).map(([align, Icon]) => (
+                          <button key={align} onClick={() => { setTextAlign(align); updateTextStyle({ textAlign: align }); }} className={`flex items-center justify-center rounded-lg border p-2 ${textAlign === align ? "border-blue-400/40 bg-blue-500/15 text-blue-200" : "border-white/10 text-slate-400 hover:bg-white/5"}`} title={`Align ${align}`}><Icon size={15} /></button>
+                        ))}
+                      </div>
+
+                      <label className="mt-3 block text-xs text-slate-400">Size
+                        <input type="number" min="8" max="160" value={fontSize} onChange={(event) => { const value = clamp(Number(event.target.value) || 8, 8, 160); setFontSize(value); updateTextStyle({ fontSize: value }); }} className="mt-1 w-full rounded-lg border border-white/10 bg-[#111827] px-3 py-2 text-xs outline-none" />
+                      </label>
+
+                      <label className="mt-3 block text-xs text-slate-400">Letter spacing <span className="float-right text-slate-500">{charSpacing}</span>
+                        <input type="range" min="-100" max="300" value={charSpacing} onChange={(event) => { const value = Number(event.target.value); setCharSpacing(value); updateTextStyle({ charSpacing: value }); }} className="mt-2 w-full accent-blue-500" />
+                      </label>
+
+                      <label className="mt-3 block text-xs text-slate-400">Line height <span className="float-right text-slate-500">{lineHeight.toFixed(2)}</span>
+                        <input type="range" min="0.8" max="2.2" step="0.05" value={lineHeight} onChange={(event) => { const value = Number(event.target.value); setLineHeight(value); updateTextStyle({ lineHeight: value }); }} className="mt-2 w-full accent-blue-500" />
                       </label>
                     </section>
                   )}
@@ -1066,6 +1151,29 @@ export default function EditorPage() {
                   </div>
                 </section>
               )}
+
+              <section className="border-t border-white/10 pt-4">
+                <div className="mb-3 flex items-center justify-between">
+                  <span className="text-xs font-semibold text-slate-400">Canvas size</span>
+                  <span className="text-[11px] text-slate-600">{canvasWidth} × {canvasHeight}</span>
+                </div>
+                <div className="grid grid-cols-4 gap-1.5">
+                  {[
+                    ["Landscape", 1200, 675],
+                    ["Square", 1080, 1080],
+                    ["HD", 1920, 1080],
+                    ["A4", 794, 1123],
+                  ].map(([label, width, height]) => (
+                    <button key={String(label)} onClick={() => resizeCanvas(Number(width), Number(height))} className="rounded-lg border border-white/10 bg-white/5 px-2 py-2 text-[10px] text-slate-400 hover:bg-white/10 hover:text-white">
+                      {label}
+                    </button>
+                  ))}
+                </div>
+                <div className="mt-2 grid grid-cols-2 gap-2">
+                  <input aria-label="Canvas width" type="number" min="240" max="2400" value={canvasWidth} onChange={(e) => setCanvasWidth(Number(e.target.value) || 240)} onBlur={() => resizeCanvas(canvasWidth, canvasHeight)} className="rounded-lg border border-white/10 bg-[#111827] px-2.5 py-2 text-xs outline-none" />
+                  <input aria-label="Canvas height" type="number" min="180" max="2400" value={canvasHeight} onChange={(e) => setCanvasHeight(Number(e.target.value) || 180)} onBlur={() => resizeCanvas(canvasWidth, canvasHeight)} className="rounded-lg border border-white/10 bg-[#111827] px-2.5 py-2 text-xs outline-none" />
+                </div>
+              </section>
 
               <section className="border-t border-white/10 pt-4">
                 <div className="mb-2 flex items-center justify-between">
